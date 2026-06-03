@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+
+# Android
+android/app/build/
+android/.gradle/
+android/build/
+*.keystore
+*.jks
+
+# Logs
+*.log
+npm-debug.log*

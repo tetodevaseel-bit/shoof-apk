@@ -1,0 +1,11 @@
+{
+  "appId": "tv.shoof.app",
+  "appName": "شوف TV",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Preferences": {}
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">شوف TV</string>
+    <string name="title_activity_main">شوف TV</string>
+    <string name="package_name">tv.shoof.app</string>
+    <string name="custom_url_scheme">tv.shoof.app</string>
+</resources>
