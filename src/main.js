@@ -1,3 +1,4 @@
+import './style.css';
 import { createApp, ref } from 'vue';
 import router from './router/index.js';
 import { setToken } from './api.js';

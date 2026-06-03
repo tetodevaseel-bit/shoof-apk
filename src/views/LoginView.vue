@@ -1,15 +1,16 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onUnmounted } from 'vue';
 
 const emit = defineEmits(['logged-in']);
 
-const step = ref('phone'); // phone | code | loading
+const step = ref('welcome'); // welcome | phone | waiting
 const phone = ref('');
-const code = ref('');
-const countryCode = ref('+966');
+const selectedCountry = ref({ code: '+966', name: 'السعودية', flag: '🇸🇦' });
+const showCountry = ref(false);
 const error = ref('');
-const requestToken = ref('');
 const sending = ref(false);
+const requestToken = ref('');
+let pollTimer = null;
 
 const countries = [
     { code: '+966', name: 'السعودية', flag: '🇸🇦' },
@@ -18,53 +19,39 @@ const countries = [
     { code: '+974', name: 'قطر', flag: '🇶🇦' },
     { code: '+973', name: 'البحرين', flag: '🇧🇭' },
     { code: '+968', name: 'عُمان', flag: '🇴🇲' },
-    { code: '+962', name: 'الأردن', flag: '🇯🇴' },
-    { code: '+961', name: 'لبنان', flag: '🇱🇧' },
     { code: '+20',  name: 'مصر', flag: '🇪🇬' },
     { code: '+964', name: 'العراق', flag: '🇮🇶' },
-    { code: '+963', name: 'سوريا', flag: '🇸🇾' },
-    { code: '+967', name: 'اليمن', flag: '🇾🇪' },
+    { code: '+962', name: 'الأردن', flag: '🇯🇴' },
+    { code: '+90',  name: 'تركيا', flag: '🇹🇷' },
     { code: '+1',   name: 'أمريكا', flag: '🇺🇸' },
     { code: '+44',  name: 'بريطانيا', flag: '🇬🇧' },
-    { code: '+90',  name: 'تركيا', flag: '🇹🇷' },
-    { code: '+7',   name: 'روسيا', flag: '🇷🇺' },
 ];
 
-const showCountry = ref(false);
-const selectedCountry = ref(countries[0]);
-
-function selectCountry(c) {
-    selectedCountry.value = c;
-    countryCode.value = c.code;
-    showCountry.value = false;
-}
-
-async function sendCode() {
+async function requestCode() {
     if (!phone.value.trim() || sending.value) return;
     sending.value = true;
     error.value = '';
     try {
         const res = await fetch('https://shoof-tv.net/api/v1/mobile/auth/request', {
-            headers: { 'Accept': 'application/json' }
+            headers: { Accept: 'application/json' }
         });
         const data = await res.json();
         requestToken.value = data.token;
-
-        // فتح البوت بتيليجرام
         window.open(data.deep_link, '_blank');
-        step.value = 'code';
+        step.value = 'waiting';
+        startPoll();
     } catch {
-        error.value = 'تعذّر الاتصال. تحقق من الإنترنت.';
+        error.value = 'فشل الاتصال. تحقق من الإنترنت.';
     } finally { sending.value = false; }
 }
 
-let pollTimer = null;
-function startPolling() {
+function startPoll() {
     pollTimer = setInterval(async () => {
         try {
-            const res = await fetch(`https://shoof-tv.net/api/v1/mobile/auth/verify/${requestToken.value}`, {
-                headers: { 'Accept': 'application/json' }
-            });
+            const res = await fetch(
+                `https://shoof-tv.net/api/v1/mobile/auth/verify/${requestToken.value}`,
+                { headers: { Accept: 'application/json' } }
+            );
             const data = await res.json();
             if (data.status === 'ok') {
                 clearInterval(pollTimer);
@@ -74,127 +61,176 @@ function startPolling() {
                 } catch {
                     localStorage.setItem('session_token', data.session_token);
                 }
-                step.value = 'loading';
-                setTimeout(() => emit('logged-in', data.session_token), 800);
+                emit('logged-in', data.session_token);
             } else if (data.status === 'expired') {
                 clearInterval(pollTimer);
-                error.value = 'انتهت الصلاحية. حاول مجدداً.';
+                error.value = 'انتهت المهلة. حاول مجدداً.';
                 step.value = 'phone';
             }
         } catch {}
     }, 2000);
 }
 
-function onCodeStep() {
-    startPolling();
-}
+onUnmounted(() => clearInterval(pollTimer));
 </script>
 
 <template>
-    <div dir="rtl" class="min-h-screen bg-[#17212b] text-white flex flex-col">
+    <div dir="rtl" class="relative min-h-screen bg-black overflow-hidden flex flex-col">
 
-        <!-- Loading -->
-        <div v-if="step === 'loading'"
-            class="flex-1 flex flex-col items-center justify-center gap-4">
-            <div class="w-16 h-16 rounded-full bg-[#2b5278] flex items-center justify-center text-4xl animate-pulse">🎬</div>
-            <p class="text-[#aab8c2]">جاري الدخول...</p>
-        </div>
+        <!-- Background cinematic overlay -->
+        <div class="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black z-0"></div>
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#1a0533_0%,_#000_70%)] opacity-70 z-0"></div>
 
-        <!-- Phone step -->
-        <template v-else-if="step === 'phone'">
-            <div class="flex-1 flex flex-col items-center justify-center px-6 gap-6">
-                <!-- Logo -->
-                <div class="w-24 h-24 rounded-full bg-gradient-to-br from-[#2b5278] to-[#1c3a5a] flex items-center justify-center text-5xl shadow-2xl">
-                    🎬
-                </div>
-                <div class="text-center">
-                    <h1 class="text-2xl font-bold">شوف TV</h1>
-                    <p class="text-[#aab8c2] text-sm mt-1">أدخل رقم هاتفك للمتابعة</p>
-                </div>
+        <!-- Animated background blobs -->
+        <div class="absolute top-20 right-10 w-40 h-40 bg-purple-900/30 rounded-full blur-3xl z-0 animate-pulse"></div>
+        <div class="absolute top-60 left-5 w-32 h-32 bg-red-900/20 rounded-full blur-3xl z-0 animate-pulse" style="animation-delay:1s"></div>
 
-                <!-- Country picker -->
-                <div class="w-full">
-                    <button @click="showCountry = !showCountry"
-                        class="w-full bg-[#232e3c] rounded-xl px-4 py-3.5 flex items-center justify-between border border-[#2b3a4a]">
-                        <span class="flex items-center gap-2 text-sm">
-                            <span class="text-xl">{{ selectedCountry.flag }}</span>
-                            <span>{{ selectedCountry.name }}</span>
-                        </span>
-                        <span class="text-[#aab8c2] flex items-center gap-2">
-                            <span>{{ selectedCountry.code }}</span>
-                            <span class="text-xs">▼</span>
-                        </span>
-                    </button>
+        <!-- Content -->
+        <div class="relative z-10 flex flex-col min-h-screen">
 
-                    <!-- Country list -->
-                    <div v-if="showCountry"
-                        class="mt-1 bg-[#232e3c] border border-[#2b3a4a] rounded-xl overflow-hidden max-h-52 overflow-y-auto">
-                        <button v-for="c in countries" :key="c.code"
-                            @click="selectCountry(c)"
-                            class="w-full px-4 py-3 flex items-center gap-3 text-sm hover:bg-[#2b3a4a] text-right">
-                            <span class="text-xl">{{ c.flag }}</span>
-                            <span class="flex-1">{{ c.name }}</span>
-                            <span class="text-[#aab8c2]">{{ c.code }}</span>
-                        </button>
+            <!-- Welcome Screen -->
+            <div v-if="step === 'welcome'" class="flex flex-col flex-1">
+
+                <!-- Top logo area -->
+                <div class="flex-1 flex flex-col items-center justify-center px-6 pt-16 pb-8">
+                    <!-- Logo -->
+                    <div class="relative mb-8">
+                        <div class="w-28 h-28 rounded-3xl bg-gradient-to-br from-purple-600 via-red-600 to-orange-500 flex items-center justify-center shadow-2xl shadow-purple-900/50">
+                            <span class="text-5xl">🎬</span>
+                        </div>
+                        <div class="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-xs font-bold border-2 border-black">▶</div>
+                    </div>
+
+                    <h1 class="text-4xl font-black text-white mb-2 tracking-tight">شوف <span class="text-red-500">TV</span></h1>
+                    <p class="text-gray-400 text-base text-center leading-relaxed">
+                        آلاف المسلسلات والأنيميات<br/>في مكان واحد
+                    </p>
+
+                    <!-- Preview thumbnails -->
+                    <div class="flex gap-2 mt-8 opacity-60">
+                        <div class="w-16 h-24 rounded-lg bg-gradient-to-b from-purple-800 to-purple-900"></div>
+                        <div class="w-16 h-24 rounded-lg bg-gradient-to-b from-red-800 to-red-900 -mt-2"></div>
+                        <div class="w-16 h-24 rounded-lg bg-gradient-to-b from-blue-800 to-blue-900"></div>
+                        <div class="w-16 h-24 rounded-lg bg-gradient-to-b from-green-800 to-green-900 -mt-2"></div>
+                        <div class="w-16 h-24 rounded-lg bg-gradient-to-b from-orange-800 to-orange-900"></div>
                     </div>
                 </div>
 
-                <!-- Phone input -->
-                <div class="w-full bg-[#232e3c] rounded-xl border border-[#2b3a4a] flex items-center overflow-hidden">
-                    <span class="px-3 text-[#aab8c2] text-sm border-l border-[#2b3a4a] py-3.5">{{ selectedCountry.code }}</span>
-                    <input v-model="phone" type="tel" placeholder="رقم الهاتف"
-                        class="flex-1 bg-transparent px-3 py-3.5 text-sm outline-none placeholder-[#4a6278]"
-                        @keyup.enter="sendCode" />
+                <!-- Bottom CTA -->
+                <div class="px-6 pb-12 space-y-3">
+                    <button @click="step = 'phone'"
+                        class="w-full py-4 rounded-2xl bg-gradient-to-r from-red-600 to-red-700 text-white font-bold text-lg shadow-lg shadow-red-900/50 active:scale-95 transition-transform">
+                        ابدأ المشاهدة
+                    </button>
+                    <p class="text-center text-gray-500 text-xs">
+                        يتطلب حساب تيليجرام للدخول
+                    </p>
                 </div>
-
-                <p v-if="error" class="text-red-400 text-xs text-center">{{ error }}</p>
-
-                <button @click="sendCode" :disabled="!phone || sending"
-                    class="w-full bg-[#2b5278] hover:bg-[#3a6a9a] disabled:opacity-40 py-3.5 rounded-xl font-semibold transition">
-                    {{ sending ? 'جاري الإرسال...' : 'التالي' }}
-                </button>
             </div>
 
-            <p class="text-center text-[#aab8c2] text-xs pb-8">
-                سيُرسَل رمز التحقق عبر تيليجرام
-            </p>
-        </template>
+            <!-- Phone Screen -->
+            <div v-else-if="step === 'phone'" class="flex flex-col flex-1 px-6">
 
-        <!-- Code step -->
-        <template v-else-if="step === 'code'" @vue:mounted="onCodeStep">
-            <div class="flex-1 flex flex-col items-center justify-center px-6 gap-6">
-                <div class="w-20 h-20 rounded-full bg-[#2b5278] flex items-center justify-center text-4xl">✈️</div>
-                <div class="text-center">
-                    <h2 class="text-xl font-bold">رمز التحقق</h2>
-                    <p class="text-[#aab8c2] text-sm mt-2">
-                        افتح تيليجرام واضغط <b class="text-white">Start</b> في بوت شوف للدخول
+                <!-- Back + Header -->
+                <div class="pt-12 pb-8">
+                    <button @click="step = 'welcome'" class="text-gray-400 text-sm mb-6 flex items-center gap-1">
+                        ← رجوع
+                    </button>
+                    <h2 class="text-3xl font-black text-white">تسجيل الدخول</h2>
+                    <p class="text-gray-400 mt-2">أدخل رقمك لتلقّي رمز الدخول</p>
+                </div>
+
+                <div class="space-y-3 flex-1">
+                    <!-- Country selector -->
+                    <div>
+                        <button @click="showCountry = !showCountry"
+                            class="w-full bg-white/10 border border-white/20 backdrop-blur rounded-2xl px-4 py-4 flex items-center justify-between">
+                            <span class="flex items-center gap-3">
+                                <span class="text-2xl">{{ selectedCountry.flag }}</span>
+                                <div class="text-right">
+                                    <div class="text-white font-semibold text-sm">{{ selectedCountry.name }}</div>
+                                    <div class="text-gray-400 text-xs">{{ selectedCountry.code }}</div>
+                                </div>
+                            </span>
+                            <span class="text-gray-400 text-xs transition-transform" :class="showCountry ? 'rotate-180' : ''">▼</span>
+                        </button>
+
+                        <!-- Dropdown -->
+                        <div v-if="showCountry"
+                            class="mt-1 bg-gray-900 border border-white/10 rounded-2xl overflow-hidden max-h-48 overflow-y-auto">
+                            <button v-for="c in countries" :key="c.code"
+                                @click="selectedCountry = c; showCountry = false"
+                                class="w-full px-4 py-3.5 flex items-center gap-3 active:bg-white/10 border-b border-white/5 last:border-0">
+                                <span class="text-xl">{{ c.flag }}</span>
+                                <span class="flex-1 text-white text-sm text-right">{{ c.name }}</span>
+                                <span class="text-gray-500 text-xs">{{ c.code }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Phone input -->
+                    <div class="bg-white/10 border border-white/20 backdrop-blur rounded-2xl flex overflow-hidden">
+                        <div class="px-4 flex items-center border-l border-white/10">
+                            <span class="text-gray-300 font-mono text-sm">{{ selectedCountry.code }}</span>
+                        </div>
+                        <input v-model="phone" type="tel" inputmode="numeric"
+                            placeholder="5XXXXXXXX"
+                            class="flex-1 bg-transparent text-white px-4 py-4 text-base outline-none placeholder-gray-600"
+                            @keyup.enter="requestCode" />
+                    </div>
+
+                    <p v-if="error" class="text-red-400 text-xs text-center bg-red-900/20 rounded-xl py-2 px-3">
+                        {{ error }}
                     </p>
                 </div>
 
-                <!-- OTP display -->
-                <div class="bg-[#232e3c] border border-[#2b5278] rounded-2xl p-5 w-full text-center">
-                    <div class="flex items-center justify-center gap-2 mb-2">
-                        <div class="w-3 h-3 rounded-full bg-[#2b5278] animate-bounce" style="animation-delay:0s"></div>
-                        <div class="w-3 h-3 rounded-full bg-[#2b5278] animate-bounce" style="animation-delay:0.2s"></div>
-                        <div class="w-3 h-3 rounded-full bg-[#2b5278] animate-bounce" style="animation-delay:0.4s"></div>
+                <!-- CTA -->
+                <div class="pb-12 pt-6">
+                    <button @click="requestCode" :disabled="!phone.trim() || sending"
+                        class="w-full py-4 rounded-2xl font-bold text-lg transition-all active:scale-95 disabled:opacity-40"
+                        :class="phone.trim() ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg shadow-red-900/40' : 'bg-white/10 text-gray-500'">
+                        {{ sending ? 'جاري الإرسال...' : 'الحصول على الرمز ←' }}
+                    </button>
+                    <p class="text-center text-gray-600 text-xs mt-3">سيُرسَل رمز التحقق عبر تيليجرام</p>
+                </div>
+            </div>
+
+            <!-- Waiting Screen -->
+            <div v-else-if="step === 'waiting'" class="flex flex-col flex-1 items-center justify-center px-6 gap-8">
+
+                <!-- Animated icon -->
+                <div class="relative">
+                    <div class="w-28 h-28 rounded-full bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-2xl">
+                        <span class="text-5xl">✈️</span>
                     </div>
-                    <p class="text-[#aab8c2] text-sm">في انتظار تأكيدك من تيليجرام...</p>
+                    <div class="absolute inset-0 rounded-full border-4 border-blue-500/30 animate-ping"></div>
+                </div>
+
+                <div class="text-center">
+                    <h2 class="text-2xl font-black text-white mb-3">تحقق من تيليجرام</h2>
+                    <p class="text-gray-400 text-base leading-relaxed">
+                        افتح بوت شوف في تيليجرام<br/>واضغط <span class="text-white font-bold bg-white/10 px-2 py-0.5 rounded">Start</span> للدخول فوراً
+                    </p>
+                </div>
+
+                <!-- Pulse dots -->
+                <div class="flex gap-2">
+                    <div v-for="i in 3" :key="i"
+                        class="w-3 h-3 rounded-full bg-blue-500 animate-bounce"
+                        :style="`animation-delay: ${(i-1)*0.2}s`"></div>
                 </div>
 
                 <button @click="window.open(`https://t.me/CrepixBot?start=mobile_${requestToken}`, '_blank')"
-                    class="w-full bg-[#2b5278] hover:bg-[#3a6a9a] py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2">
+                    class="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform">
                     <span class="text-xl">✈️</span>
                     فتح تيليجرام
                 </button>
 
-                <button @click="step = 'phone'; clearInterval(pollTimer)"
-                    class="text-[#aab8c2] text-sm">
-                    ← تغيير رقم الهاتف
+                <button @click="step = 'phone'; clearInterval(pollTimer)" class="text-gray-500 text-sm">
+                    ← تغيير الرقم
                 </button>
             </div>
-        </template>
 
-        <!-- Polling starter -->
-        <div v-if="step === 'code'" class="hidden" @vue:mounted="onCodeStep"></div>
+        </div>
     </div>
 </template>
